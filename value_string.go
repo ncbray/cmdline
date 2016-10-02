@@ -110,12 +110,23 @@ func (p *Enum) Call(callback func(value string)) ValueHandler {
 }
 
 type FilePath struct {
-	Root      string
-	MustExist bool
+	Root       string
+	MustExist  bool
+	FileFilter func(os.FileInfo) bool
+}
+
+func (p *FilePath) effectivePath(file string) string {
+	if p.Root != "" {
+		return filepath.Join(p.Root, file)
+	} else if file != "" {
+		return file
+	} else {
+		return "."
+	}
 }
 
 func (p *FilePath) Parse(text string) (string, error) {
-	fullpath := filepath.Join(p.Root, text)
+	fullpath := p.effectivePath(text)
 	_, err := os.Stat(fullpath)
 	if err != nil {
 		if p.MustExist && os.IsNotExist(err) {
@@ -127,19 +138,27 @@ func (p *FilePath) Parse(text string) (string, error) {
 
 func (p *FilePath) Complete(text string, observer CompletionObserver) {
 	dir, prefix := filepath.Split(text)
-	files, err := ioutil.ReadDir(filepath.Join(p.Root, dir))
+	files, err := ioutil.ReadDir(p.effectivePath(dir))
+	// If this path isn't rooted in a real directory, don't offer any completions.
 	if err != nil {
 		return
 	}
 	for _, file := range files {
 		name := file.Name()
-		if strings.HasPrefix(name, prefix) {
-			full := filepath.Join(dir, name)
-			if file.IsDir() {
-				observer.PartialCompletion(full + "/")
-			} else {
-				observer.FinalCompletion(full)
-			}
+		// Is it a valid completion?
+		if !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		// Does the application accept it as a completion?
+		if p.FileFilter != nil && !p.FileFilter(file) {
+			continue
+		}
+		// Generate the completion.
+		full := filepath.Join(dir, name)
+		if file.IsDir() {
+			observer.PartialCompletion(full + "/")
+		} else {
+			observer.FinalCompletion(full)
 		}
 	}
 }
