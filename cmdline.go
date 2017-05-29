@@ -374,7 +374,7 @@ func (app *App) Run(args []string) {
 	}
 	if !ok {
 		os.Stdout.WriteString("\n")
-		app.WriteHelp(os.Stdout)
+		app.WriteHelp(os.Stderr)
 		os.Exit(1)
 	}
 }
